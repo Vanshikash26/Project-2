@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — Library System</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+
+  <header class="topbar">
+    <div class="brand">
+      <h1>LIBRARY SYSTEM</h1>
+      <span class="role-badge {{ 'librarian' if session.role == 'librarian' else 'member' }}">
+        {{ session.role|upper }}
+      </span>
+    </div>
+    <div class="topbar-right">
+      <span class="username">{{ session.username }}</span>
+      <a href="{{ url_for('logout') }}" class="btn-logout">Logout</a>
+    </div>
+  </header>
+
+  <main>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="flash">
+          {% for message in messages %}<p>{{ message }}</p>{% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    {% if session.role == 'librarian' %}
+    <!-- ============ LIBRARIAN VIEW ============ -->
+
+    <section class="card">
+      <h2>Add New Book</h2>
+      <form method="POST" action="{{ url_for('add_book') }}" class="form-row">
+        <div class="form-group">
+          <label>Title</label>
+          <input type="text" name="title" required>
+        </div>
+        <div class="form-group">
+          <label>Author</label>
+          <input type="text" name="author" required>
+        </div>
+        <div class="form-group">
+          <label>Category</label>
+          <input type="text" name="category" required>
+        </div>
+        <div class="form-group small">
+          <label>Copies</label>
+          <input type="number" name="copies" min="1" value="1" required>
+        </div>
+        <div class="form-group small">
+          <label>&nbsp;</label>
+          <button type="submit" class="btn-primary">Add</button>
+        </div>
+      </form>
+    </section>
+
+    <h2 class="section-title">Currently Borrowed Books ({{ active_borrows|length }})</h2>
+    <section class="tickets-list">
+      {% if active_borrows|length == 0 %}
+        <p class="empty-state">No books are currently borrowed.</p>
+      {% endif %}
+      {% for record in active_borrows %}
+        {% set is_overdue = record.due_date < now %}
+        <div class="ticket-card {{ 'overdue' if is_overdue }}">
+          <div class="ticket-header">
+            <span class="ticket-subject">{{ record.book_title }}</span>
+            <span class="badge {{ 'status-overdue' if is_overdue else 'status-active' }}">
+              {{ 'OVERDUE' if is_overdue else 'ACTIVE' }}
+            </span>
+          </div>
+          <div class="ticket-meta">
+            <span>Borrowed by: {{ record.username }}</span>
+            <span>Due: {{ record.due_date[:10] }}</span>
+          </div>
+          <form method="POST" action="{{ url_for('return_book', record_id=record.id) }}" class="agent-update-form">
+            <button type="submit" class="btn-secondary">Mark as Returned</button>
+          </form>
+        </div>
+      {% endfor %}
+    </section>
+
+    {% else %}
+    <!-- ============ MEMBER VIEW ============ -->
+
+    <h2 class="section-title">My Borrowed Books</h2>
+    <section class="tickets-list">
+      {% if my_borrows|length == 0 %}
+        <p class="empty-state">You haven't borrowed any books yet.</p>
+      {% endif %}
+      {% for record in my_borrows %}
+        {% set is_returned = record.returned_at is not none %}
+        {% set is_overdue = (not is_returned) and (record.due_date < now) %}
+        <div class="ticket-card {{ 'overdue' if is_overdue }}">
+          <div class="ticket-header">
+            <span class="ticket-subject">{{ record.title }} <span class="text-dim">by {{ record.author }}</span></span>
+            <span class="badge
+              {% if is_returned %}status-returned
+              {% elif is_overdue %}status-overdue
+              {% else %}status-active{% endif %}">
+              {% if is_returned %}RETURNED{% elif is_overdue %}OVERDUE{% else %}ACTIVE{% endif %}
+            </span>
+          </div>
+          <div class="ticket-meta">
+            <span>Due: {{ record.due_date[:10] }}</span>
+            {% if record.fine_amount > 0 %}<span class="fine-text">Fine paid: Rs.{{ record.fine_amount }}</span>{% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </section>
+    {% endif %}
+
+    <h2 class="section-title">{{ 'Library Inventory' if session.role == 'librarian' else 'Browse Books' }}</h2>
+    <form method="GET" action="{{ url_for('dashboard') }}" class="search-bar">
+      <input type="text" name="search" placeholder="Search by title or author..." value="{{ search }}">
+      <button type="submit" class="btn-secondary">Search</button>
+    </form>
+
+    <section class="book-grid">
+      {% for book in books %}
+        <div class="book-card">
+          <h3>{{ book.title }}</h3>
+          <p class="book-author">by {{ book.author }}</p>
+          <span class="badge category-badge">{{ book.category }}</span>
+          <p class="copies-info">{{ book.available_copies }} / {{ book.total_copies }} available</p>
+
+          {% if session.role == 'member' %}
+            {% if book.available_copies > 0 %}
+              <form method="POST" action="{{ url_for('borrow_book', book_id=book.id) }}">
+                <button type="submit" class="btn-primary small-btn">Borrow</button>
+              </form>
+            {% else %}
+              <button class="btn-primary small-btn" disabled>Not Available</button>
+            {% endif %}
+          {% else %}
+            <form method="POST" action="{{ url_for('delete_book', book_id=book.id) }}">
+              <button type="submit" class="btn-danger small-btn">Remove</button>
+            </form>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </section>
+  </main>
+</body>
+</html>
